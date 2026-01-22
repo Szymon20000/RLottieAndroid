@@ -68,6 +68,7 @@ open class RLottieDrawable : BitmapDrawable, Animatable {
   @Volatile
   var backgroundBitmap: Bitmap? = null
     private set
+  @Volatile
   private var destroyWhenDone = false
   private var decodeSingleFrame = false
   private var singleFrameDecoded = false
@@ -112,6 +113,9 @@ open class RLottieDrawable : BitmapDrawable, Animatable {
   }
 
   private val uiRunnableGenerateCacheQueue = Runnable {
+    if (destroyWhenDone) {
+      return@Runnable
+    }
     if (cacheGenerateTask != null) {
       createCache(nativePtr, width, height)
       uiHandler.post(uiRunnableCacheFinished)
@@ -134,6 +138,7 @@ open class RLottieDrawable : BitmapDrawable, Animatable {
     }
     if (!hasParentView() && nextRenderingBitmap != null && loadFrameTask != null) {
       loadFrameTask = null
+      nextRenderingBitmap!!.recycle()
       nextRenderingBitmap = null
     }
   }
@@ -141,10 +146,7 @@ open class RLottieDrawable : BitmapDrawable, Animatable {
   private fun decodeFrameFinishedInternal() {
     if (destroyWhenDone) {
       checkRunningTasks()
-      if (loadFrameTask == null && cacheGenerateTask == null && nativePtr != 0L) {
-        destroy(nativePtr)
-        nativePtr = 0
-      }
+      recycle(true);
     }
     if (nativePtr == 0L) {
       recycleResources()
@@ -165,6 +167,15 @@ open class RLottieDrawable : BitmapDrawable, Animatable {
       backgroundBitmap!!.recycle()
       backgroundBitmap = null
     }
+    if (nextRenderingBitmap != null) {
+      nextRenderingBitmap!!.recycle()
+      nextRenderingBitmap = null
+    }
+    pendingColorUpdates.clear()
+    newColorUpdates.clear()
+    pendingReplaceColors = null
+    newReplaceColors = null
+    
   }
 
   private val loadFrameRunnable = Runnable {
@@ -413,18 +424,42 @@ open class RLottieDrawable : BitmapDrawable, Animatable {
   }
 
   fun recycle() {
+   recycle(false);
+  }
+
+   fun recycle(calledByUs: Boolean = false) {
+    Log.d("RLottieDrawable", "recycle() called")
+    destroyWhenDone = true;
     isRunning = false
     isRecycled = true
     checkRunningTasks()
-    if (loadFrameTask == null && cacheGenerateTask == null) {
-      if (nativePtr != 0L) {
+    if (loadFrameTask != null || cacheGenerateTask != null) {
+        Log.d("RLottieDrawable", "recycle() deferred until tasks complete  not null? loadFrameTask: ${loadFrameTask != null}, cacheGenerateTask: ${cacheGenerateTask != null} "  )
+        if (loadFrameTask != null && !calledByUs) {
+          loadFrameRunnableQueue.execute {
+            uiHandler.post {
+              loadFrameTask = null
+              recycle(true)
+            }
+          }
+        }
+        if (cacheGenerateTask != null && !calledByUs) {
+          lottieCacheGenerateQueue?.execute {
+            uiHandler.post {
+              cacheGenerateTask = null
+              recycle(true)
+            }
+          }
+        }
+        return
+    }
+    if (nativePtr != 0L) {
         destroy(nativePtr)
         nativePtr = 0
-      }
-      recycleResources()
-    } else {
-      destroyWhenDone = true
     }
+    recycleResources() 
+    
+    Log.d("RLottieDrawable", "recycle() complete")
   }
 
   fun setPlaybackMode(value: PlaybackMode) {
