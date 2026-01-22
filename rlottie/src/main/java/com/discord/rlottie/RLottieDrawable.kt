@@ -428,13 +428,11 @@ open class RLottieDrawable : BitmapDrawable, Animatable {
   }
 
    fun recycle(calledByUs: Boolean = false) {
-    Log.d("RLottieDrawable", "recycle() called")
     destroyWhenDone = true;
     isRunning = false
     isRecycled = true
     checkRunningTasks()
     if (loadFrameTask != null || cacheGenerateTask != null) {
-        Log.d("RLottieDrawable", "recycle() deferred until tasks complete  not null? loadFrameTask: ${loadFrameTask != null}, cacheGenerateTask: ${cacheGenerateTask != null} "  )
         if (loadFrameTask != null && !calledByUs) {
           loadFrameRunnableQueue.execute {
             uiHandler.post {
@@ -458,8 +456,6 @@ open class RLottieDrawable : BitmapDrawable, Animatable {
         nativePtr = 0
     }
     recycleResources() 
-    
-    Log.d("RLottieDrawable", "recycle() complete")
   }
 
   fun setPlaybackMode(value: PlaybackMode) {
